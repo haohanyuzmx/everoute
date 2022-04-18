@@ -125,24 +125,11 @@ func main() {
 		klog.Fatalf("unable to create policy controller: %s", err.Error())
 	}
 
-	if enableCNI {
-		// pod controller
-		if err = (&k8s.PodReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
-			klog.Fatalf("unable to create pod controller: %s", err.Error())
-		}
-		klog.Info("start pod controller")
-
-		// networkPolicy controller
-		if err = (&k8s.NetworkPolicyReconciler{
-			Client: mgr.GetClient(),
-			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr); err != nil {
-			klog.Fatalf("unable to create networkPolicy controller: %s", err.Error())
-		}
-		klog.Info("start networkPolicy controller")
+	if err = (&k8s.SecretReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		klog.Fatalf("unable to create policy controller: %s", err.Error())
 	}
 
 	// register validate handle

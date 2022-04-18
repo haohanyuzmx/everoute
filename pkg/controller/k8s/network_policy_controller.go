@@ -42,6 +42,7 @@ import (
 
 // NetworkPolicyReconciler watch network policy and sync to security policy
 type NetworkPolicyReconciler struct {
+	erClient client.Client
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -63,7 +64,7 @@ func (r *NetworkPolicyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 				Namespace: req.Namespace,
 			},
 		}
-		if err = r.Delete(ctx, &securityPolicy); err != nil && !errors.IsNotFound(err) {
+		if err = r.erClient.Delete(ctx, &securityPolicy); err != nil && !errors.IsNotFound(err) {
 			klog.Errorf("Delete securityPolicy %s failed, err: %s", securityPolicyName, err)
 			return ctrl.Result{}, err
 		}
@@ -75,12 +76,12 @@ func (r *NetworkPolicyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 		Namespace: req.Namespace,
 		Name:      securityPolicyName,
 	}
-	err := r.Get(ctx, securityPolicyReq, securityPolicy)
+	err := r.erClient.Get(ctx, securityPolicyReq, securityPolicy)
 	// generate new securityPolicy
 	newSecurityPolicy := getSecurityPolicy(&networkPolicy)
 	if errors.IsNotFound(err) {
 		// submit creation
-		if err := r.Create(ctx, newSecurityPolicy); err != nil {
+		if err := r.erClient.Create(ctx, newSecurityPolicy); err != nil {
 			klog.Errorf("create securityPolicy %s, err: %s", newSecurityPolicy.Name, err)
 			return ctrl.Result{}, err
 		}
@@ -88,7 +89,7 @@ func (r *NetworkPolicyReconciler) Reconcile(req ctrl.Request) (ctrl.Result, erro
 	if err == nil {
 		// submit update
 		securityPolicy.Spec = *(newSecurityPolicy.Spec.DeepCopy())
-		if err := r.Update(ctx, securityPolicy); err != nil {
+		if err := r.erClient.Update(ctx, securityPolicy); err != nil {
 			klog.Errorf("update securityPolicy %s, err: %s", securityPolicy.Name, err)
 			return ctrl.Result{}, err
 		}
@@ -116,12 +117,6 @@ func (r *NetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err = c.Watch(&source.Kind{Type: &networkingv1.NetworkPolicy{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return err
-	}
-
-	if err = c.Watch(&source.Kind{Type: &v1alpha1.SecurityPolicy{}}, &handler.Funcs{
-		CreateFunc: r.addSecurityPolicy,
-	}); err != nil {
 		return err
 	}
 

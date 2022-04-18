@@ -43,6 +43,7 @@ import (
 
 // PodReconciler watch pod and sync to endpoint
 type PodReconciler struct {
+	erClient client.Client
 	client.Client
 	Scheme *runtime.Scheme
 }
@@ -64,7 +65,7 @@ func (r *PodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				Namespace: req.Namespace,
 			},
 		}
-		if err = r.Delete(ctx, &endpoint); err != nil && !errors.IsNotFound(err) {
+		if err = r.erClient.Delete(ctx, &endpoint); err != nil && !errors.IsNotFound(err) {
 			klog.Errorf("Delete Endpoint %s failed, err: %s", endpointName, err)
 			return ctrl.Result{}, err
 		}
@@ -81,7 +82,7 @@ func (r *PodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		Namespace: req.Namespace,
 		Name:      endpointName,
 	}
-	err := r.Get(ctx, endpointReq, &endpoint)
+	err := r.erClient.Get(ctx, endpointReq, &endpoint)
 	switch errors.ReasonForError(err) {
 	case metav1.StatusReasonNotFound:
 		// add new pod
@@ -99,7 +100,7 @@ func (r *PodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			endpoint.ObjectMeta.Labels[key] = value
 		}
 		// submit creation
-		if err := r.Create(ctx, &endpoint); err != nil {
+		if err := r.erClient.Create(ctx, &endpoint); err != nil {
 			klog.Errorf("create endpoint %s err: %s", endpointName, err)
 			return ctrl.Result{}, err
 		}
@@ -110,14 +111,14 @@ func (r *PodReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			endpoint.ObjectMeta.Labels[key] = value
 		}
 		// submit update
-		if err := r.Update(ctx, &endpoint); err != nil {
+		if err := r.erClient.Update(ctx, &endpoint); err != nil {
 			klog.Errorf("update endpoint %s err: %s", endpointName, err)
 			return ctrl.Result{}, err
 		}
 		// update status
 		endpoint.Status.Agents = []string{pod.Spec.NodeName}
 		endpoint.Status.IPs = []types.IPAddress{types.IPAddress(pod.Status.PodIP)}
-		if err := r.Status().Update(ctx, &endpoint); err != nil {
+		if err := r.erClient.Status().Update(ctx, &endpoint); err != nil {
 			klog.Errorf("update endpoint status %s err: %s", endpointName, err)
 			return ctrl.Result{}, err
 		}
@@ -145,12 +146,6 @@ func (r *PodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	if err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return err
-	}
-
-	if err = c.Watch(&source.Kind{Type: &v1alpha1.Endpoint{}}, &handler.Funcs{
-		CreateFunc: r.addEndpoint,
-	}); err != nil {
 		return err
 	}
 
